@@ -28,3 +28,47 @@ test('plan, customise, budget, persist and book a sample trip',async({page})=>{
  await page.screenshot({path:`test-results/${test.info().project.name}-trip.png`,fullPage:true});
 });
 test('landing images and questionnaire constraints',async({page})=>{await page.goto('/');await expect(page.locator('.destination-card')).toHaveCount(3);await page.locator('footer').scrollIntoViewIfNeeded();await expect.poll(()=>page.locator('img').evaluateAll(imgs=>imgs.every(i=>(i as HTMLImageElement).complete&&(i as HTMLImageElement).naturalWidth>0))).toBeTruthy();await page.evaluate(()=>window.scrollTo(0,0));await page.screenshot({path:`test-results/${test.info().project.name}-landing.png`,fullPage:true});await page.getByRole('button',{name:'Plan a trip',exact:true}).click();await page.getByLabel('How many days?').fill('0');await page.getByRole('button',{name:'A few more details'}).click();await expect(page.getByLabel('Your destination')).toBeVisible();});
+
+test('multiple destinations follow route order and retain the right links after reload', async ({page}) => {
+ await page.goto('/');
+ await page.getByRole('button',{name:'Plan a trip',exact:true}).click();
+ await page.getByLabel('How many days?').fill('2');
+ await page.getByRole('button',{name:'Add another destination'}).click();
+ await page.getByLabel('Days at stop 2').fill('1');
+ await page.getByRole('button',{name:'Add another destination'}).click();
+ await expect(page.getByRole('button',{name:'Add another destination'})).toBeDisabled();
+ await page.getByRole('button',{name:'Remove destination 3'}).click();
+ await page.getByRole('button',{name:'Move stop 2 up'}).click();
+ await expect(page.getByLabel('Your destination')).toHaveValue('Kyoto');
+ await expect(page.getByLabel('Destination 2',{exact:true})).toHaveValue('Lisbon');
+ await expect(page.getByLabel('How many days?')).toHaveValue('1');
+ await page.getByRole('button',{name:'A few more details'}).click();
+ await page.getByRole('button',{name:'Create my sample trip'}).click();
+ await expect(page.getByRole('heading',{name:'Kyoto → Lisbon, your way.'})).toBeVisible();
+ await expect(page.getByLabel('Activity 1 name')).toHaveValue('Explore the lanes of Higashiyama');
+ await expect(page.getByRole('link',{name:'Hotels',exact:true})).toHaveAttribute('href',/Kyoto/);
+ await expect(page.locator('.budget-row strong')).toHaveText('£330');
+ await page.getByRole('button',{name:'Day 2',exact:true}).click();
+ await expect(page.getByLabel('Activity 1 name')).toHaveValue('Wander the lanes of Alfama');
+ await expect(page.getByRole('link',{name:'Open destination in Google Maps'})).toHaveAttribute('href',/query=Lisbon/);
+ await expect(page.getByRole('link',{name:'Hotels',exact:true})).toHaveAttribute('href',/Lisbon/);
+ await expect(page.getByRole('link',{name:'Explore this stop'}).first()).toHaveAttribute('href',/Lisbon/);
+ await page.reload();
+ if(test.info().project.name==='mobile')await page.getByRole('button',{name:'Toggle navigation'}).click();
+ await page.getByRole('button',{name:'My trips',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'Kyoto → Lisbon, your way.'})).toBeVisible();
+ await page.getByRole('button',{name:'Day 3',exact:true}).click();
+ await expect(page.locator('.day-location')).toContainText('Lisbon');
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();
+ await page.screenshot({path:`test-results/${test.info().project.name}-multi-trip.png`,fullPage:true});
+});
+
+test('previous single-destination saved trip is migrated without losing edits', async ({page}) => {
+ await page.goto('/');
+ await page.evaluate(()=>localStorage.setItem('trippilot-trip',JSON.stringify({preferences:{destination:'Lisbon',days:1,travellers:2,budget:1000,pace:'Relaxed',interests:['Culture']},activities:[[{id:'old-1',time:'09:00',title:'My saved café',description:'Keep my changes',cost:20,x:40,y:50}]]})));
+ await page.reload();
+ if(test.info().project.name==='mobile')await page.getByRole('button',{name:'Toggle navigation'}).click();
+ await page.getByRole('button',{name:'My trips',exact:true}).click();
+ await expect(page.getByLabel('Activity 1 name')).toHaveValue('My saved café');
+ await expect(page.getByRole('heading',{name:'Lisbon, your way.'})).toBeVisible();
+});
